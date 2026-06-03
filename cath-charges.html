@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Cath Charges"/>
+<meta name="theme-color" content="#0a1628"/>
+<title>Cath Lab Charge Capture</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;background:#0a1628;font-family:'Segoe UI',system-ui,sans-serif;color:#e2e8f0;}
+#root{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+input,select,button{font-family:inherit;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px;}
+input[type=number]::-webkit-inner-spin-button{opacity:1;}
+@media print{ body { display: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useCallback,useRef}=React;
+
+// ─── DATA ────────────────────────────────────────────────────────────────────
+
+const ANGIO_BUTTONS=[
+  {id:"cfa_angio",group:"Access Site Angiograms",label:"Common Femoral Artery Angiogram",codes:[{cpt:"36140",desc:"Extremity arterial catheter placement"},{cpt:"75710-26",desc:"Extremity artery angio unilateral S&I"}]},
+  {id:"cfv_angio",group:"Access Site Angiograms",label:"Common Femoral Vein Angiogram",codes:[{cpt:"36012",desc:"Venous catheter 2nd order (femoral vein)"},{cpt:"75820-26",desc:"Extremity vein angio unilateral S&I"}]},
+  {id:"rij_angio",group:"Access Site Angiograms",label:"Right Internal Jugular Vein Angiogram",codes:[{cpt:"36010",desc:"Non-selective SVC catheter via sheath"},{cpt:"75827-26",desc:"SVC venogram S&I"}]},
+  {id:"r_brachial_vein",group:"Access Site Angiograms",label:"Right Brachial / Right Subclavian Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order (subclavian vein off SVC)"},{cpt:"75820-26",desc:"Extremity vein angio unilateral S&I"}]},
+  {id:"l_brachial_vein",group:"Access Site Angiograms",label:"Left Brachial / Left Subclavian Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order (subclavian vein off SVC)"},{cpt:"75820-26",desc:"Extremity vein angio unilateral S&I"}]},
+  {id:"r_iliac_art",group:"Access Site Angiograms",label:"Right Common Iliac Artery Angiogram",codes:[{cpt:"36215",desc:"Arterial catheter 1st order (iliac off aorta)"},{cpt:"75710-26",desc:"Extremity artery angio unilateral S&I"}]},
+  {id:"l_iliac_art",group:"Access Site Angiograms",label:"Left Common Iliac Artery Angiogram",codes:[{cpt:"36215",desc:"Arterial catheter 1st order (iliac off aorta)"},{cpt:"75710-26",desc:"Extremity artery angio unilateral S&I"}]},
+  {id:"bilat_iliac_art",group:"Access Site Angiograms",label:"Bilateral Iliac Artery Angiogram",codes:[{cpt:"36215",desc:"Arterial catheter 1st order (iliac)"},{cpt:"75716-26",desc:"Extremity artery angio bilateral S&I"}]},
+  {id:"r_iliac_vein",group:"Access Site Angiograms",label:"Right Common Iliac Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order"},{cpt:"75820-26",desc:"Extremity vein angio unilateral S&I"}]},
+  {id:"l_iliac_vein",group:"Access Site Angiograms",label:"Left Common Iliac Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order"},{cpt:"75820-26",desc:"Extremity vein angio unilateral S&I"}]},
+  {id:"ivc_angio",group:"Systemic Venous Angiograms",label:"IVC Angiogram",codes:[{cpt:"36010",desc:"Non-selective IVC catheter placement"},{cpt:"75825-26",desc:"IVC venogram S&I"}]},
+  {id:"svc_angio",group:"Systemic Venous Angiograms",label:"SVC Angiogram (Right SVC)",codes:[{cpt:"36010",desc:"Non-selective SVC catheter placement"},{cpt:"75827-26",desc:"SVC venogram S&I"}]},
+  {id:"lsvc_angio",group:"Systemic Venous Angiograms",label:"Left SVC Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order (L SVC)"},{cpt:"93584-26",desc:"Left SVC venogram S&I"}]},
+  {id:"svc_pa_angio",group:"Systemic Venous Angiograms",label:"SVC Angiogram — PA Visualization (Glenn/Fontan)",codes:[{cpt:"36010",desc:"Non-selective SVC catheter"},{cpt:"75827-26",desc:"SVC venogram S&I"},{cpt:"93568",desc:"Pulmonary angio add-on (RPA+LPA described in report)"}],note:"Bill 93568 only if you specifically describe RPA and LPA anatomy in the report"},
+  {id:"hepatic_vein",group:"Systemic Venous Angiograms",label:"Hepatic Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order (hepatic vein)"},{cpt:"75891-26",desc:"Hepatic venogram S&I"}]},
+  {id:"azygos_angio",group:"Systemic Venous Angiograms",label:"Azygos / Hemiazygos Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order"},{cpt:"93585-26",desc:"Azygos/Hemiazygos venogram S&I"}]},
+  {id:"fontan_ra_angio",group:"Right Heart & Pulmonary Angiograms",label:"Fontan / Right Atrial Angiogram",codes:[{cpt:"36013",desc:"RT heart catheter (CPT 36013 covers RA, RV, MPA — no separate RA-only code exists)"},{cpt:"93566",desc:"RV or RA angio add-on"}],note:"CPT 36013 is correct for RA catheter position — no separate RA-only code exists in CPT"},
+  {id:"ra_pa_angio",group:"Right Heart & Pulmonary Angiograms",label:"Right Atrial Angiogram — PA Visualization",codes:[{cpt:"36013",desc:"RT heart catheter"},{cpt:"93566",desc:"RV or RA angio add-on"},{cpt:"93568",desc:"Pulmonary angio add-on (PAs described in report)"}],note:"Bill 93568 only if RPA/LPA specifically described in report"},
+  {id:"rv_angio",group:"Right Heart & Pulmonary Angiograms",label:"Right Ventricular Angiogram",codes:[{cpt:"36013",desc:"RT heart catheter"},{cpt:"93566",desc:"RV or RA angio add-on"}]},
+  {id:"rv_pa_angio",group:"Right Heart & Pulmonary Angiograms",label:"RV Angiogram — PA Visualization",codes:[{cpt:"36013",desc:"RT heart catheter"},{cpt:"93566",desc:"RV or RA angio add-on"},{cpt:"93568",desc:"Pulmonary angio add-on"}]},
+  {id:"mpa_conduit_angio",group:"Right Heart & Pulmonary Angiograms",label:"RV-PA Conduit / Main PA Angiogram",codes:[{cpt:"36013",desc:"RT heart / main PA catheter"},{cpt:"93568",desc:"Pulmonary angio add-on"}]},
+  {id:"rpa_angio",group:"Right Heart & Pulmonary Angiograms",label:"Right Pulmonary Artery Angiogram",codes:[{cpt:"36014",desc:"Pulmonary artery catheter (R or L)"},{cpt:"93568",desc:"Pulmonary angio add-on"}]},
+  {id:"lpa_angio",group:"Right Heart & Pulmonary Angiograms",label:"Left Pulmonary Artery Angiogram",codes:[{cpt:"36014",desc:"Pulmonary artery catheter (R or L)"},{cpt:"93568",desc:"Pulmonary angio add-on"}]},
+  {id:"bilat_pa_angio",group:"Right Heart & Pulmonary Angiograms",label:"Bilateral PA Angiogram (2 separate catheter positions)",codes:[{cpt:"36014",desc:"Pulmonary artery catheter x2",qty:2},{cpt:"93568",desc:"Pulmonary angio add-on"}]},
+  {id:"wedge_rul",group:"Wedge Angiograms (Segmental PA to Pulmonary Vein)",label:"Wedge — Right Upper Lobe",codes:[{cpt:"36015",desc:"PA segmental catheter placement"},{cpt:"93568",desc:"Pulmonary angio + PV interpretation add-on"}],note:"Document pulmonary vein return in report"},
+  {id:"wedge_rml",group:"Wedge Angiograms (Segmental PA to Pulmonary Vein)",label:"Wedge — Right Middle Lobe",codes:[{cpt:"36015",desc:"PA segmental catheter placement"},{cpt:"93568",desc:"Pulmonary angio + PV interpretation add-on"}],note:"Document pulmonary vein return in report"},
+  {id:"wedge_rll",group:"Wedge Angiograms (Segmental PA to Pulmonary Vein)",label:"Wedge — Right Lower Lobe",codes:[{cpt:"36015",desc:"PA segmental catheter placement"},{cpt:"93568",desc:"Pulmonary angio + PV interpretation add-on"}],note:"Document pulmonary vein return in report"},
+  {id:"wedge_lul",group:"Wedge Angiograms (Segmental PA to Pulmonary Vein)",label:"Wedge — Left Upper Lobe",codes:[{cpt:"36015",desc:"PA segmental catheter placement"},{cpt:"93568",desc:"Pulmonary angio + PV interpretation add-on"}],note:"Document pulmonary vein return in report"},
+  {id:"wedge_lll",group:"Wedge Angiograms (Segmental PA to Pulmonary Vein)",label:"Wedge — Left Lower Lobe",codes:[{cpt:"36015",desc:"PA segmental catheter placement"},{cpt:"93568",desc:"Pulmonary angio + PV interpretation add-on"}],note:"Document pulmonary vein return in report"},
+  {id:"rpv_upper",group:"Direct Pulmonary Vein Angiograms",label:"Right Upper Pulmonary Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order (pulmonary vein off LA)"},{cpt:"75774-26",desc:"Each add'l vessel after basic S&I (pulm vein selective)"}],note:"Document selective catheter position in pulmonary vein in report"},
+  {id:"rpv_lower",group:"Direct Pulmonary Vein Angiograms",label:"Right Lower Pulmonary Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order"},{cpt:"75774-26",desc:"Each add'l vessel S&I"}],note:"Document selective catheter position"},
+  {id:"lpv_upper",group:"Direct Pulmonary Vein Angiograms",label:"Left Upper Pulmonary Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order"},{cpt:"75774-26",desc:"Each add'l vessel S&I"}],note:"Document selective catheter position"},
+  {id:"lpv_lower",group:"Direct Pulmonary Vein Angiograms",label:"Left Lower Pulmonary Vein Angiogram",codes:[{cpt:"36011",desc:"Venous catheter 1st order"},{cpt:"75774-26",desc:"Each add'l vessel S&I"}],note:"Document selective catheter position"},
+  {id:"lv_angio",group:"Left Heart & Aortic Angiograms",label:"Left Ventricular Angiogram",codes:[{cpt:"93565",desc:"LV or LA angio add-on"}],note:"Requires base left heart cath code (93595/93452/93458/93460)"},
+  {id:"ascending_aorta",group:"Left Heart & Aortic Angiograms",label:"Ascending Aorta Angiogram",codes:[{cpt:"36200",desc:"Aorta nonselective catheter"},{cpt:"93567",desc:"Supravalvar aortogram add-on"}]},
+  {id:"transverse_arch",group:"Left Heart & Aortic Angiograms",label:"Transverse Aortic Arch Angiogram (head/neck vessels, descending aorta seen)",codes:[{cpt:"36200",desc:"Aorta nonselective catheter"},{cpt:"75605-26",desc:"Thoracic aorta with serialography S&I"}]},
+  {id:"descending_aorta",group:"Left Heart & Aortic Angiograms",label:"Descending Aorta Angiogram",codes:[{cpt:"36200",desc:"Aorta nonselective catheter"},{cpt:"75605-26",desc:"Descending thoracic aorta S&I"}]},
+  {id:"full_aorta",group:"Left Heart & Aortic Angiograms",label:"Full Aortic Angiogram (Ascending + Arch + Descending)",codes:[{cpt:"36200",desc:"Aorta nonselective catheter"},{cpt:"93567",desc:"Supravalvar/ascending aortogram add-on"},{cpt:"75605-26",desc:"Thoracic aorta with serialography S&I"}]},
+  {id:"abdom_aorta",group:"Left Heart & Aortic Angiograms",label:"Abdominal Aorta Angiogram",codes:[{cpt:"36200",desc:"Aorta nonselective catheter"},{cpt:"75625-26",desc:"Abdominal aorta S&I"}]},
+  {id:"mapca_nonselective",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Aortogram (nonselective, MAPCAs seen on aortic injection)",codes:[{cpt:"36200",desc:"Aorta nonselective catheter"},{cpt:"75605-26",desc:"Thoracic aorta S&I (MAPCAs visualized)"}]},
+  {id:"mapca_selective_1",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Selective Angiogram #1 (catheter into MAPCA)",codes:[{cpt:"36215",desc:"Arterial catheter 1st order (MAPCA directly off aorta)"},{cpt:"75726-26",desc:"Visceral selective angio S&I"}]},
+  {id:"mapca_selective_2",requires:"mapca_selective_1",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Selective Angiogram #2",codes:[{cpt:"36218",desc:"Each additional arterial vessel"},{cpt:"75774-26",desc:"Each add'l vessel after basic S&I"}]},
+  {id:"mapca_selective_3",requires:"mapca_selective_2",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Selective Angiogram #3",codes:[{cpt:"36218",desc:"Each additional arterial vessel"},{cpt:"75774-26",desc:"Each add'l vessel after basic S&I"}]},
+  {id:"mapca_selective_4",requires:"mapca_selective_3",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Selective Angiogram #4",codes:[{cpt:"36218",desc:"Each additional arterial vessel"},{cpt:"75774-26",desc:"Each add'l vessel after basic S&I"}]},
+  {id:"mapca_selective_5",requires:"mapca_selective_4",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Selective Angiogram #5",codes:[{cpt:"36218",desc:"Each additional arterial vessel"},{cpt:"75774-26",desc:"Each add'l vessel after basic S&I"}]},
+  {id:"mapca_selective_6",requires:"mapca_selective_5",group:"Aortopulmonary Collaterals (MAPCAs)",label:"MAPCA — Selective Angiogram #6",codes:[{cpt:"36218",desc:"Each additional arterial vessel"},{cpt:"75774-26",desc:"Each add'l vessel after basic S&I"}]},
+  {id:"r_subclavian_art",group:"Subclavian & Mammary Angiograms",label:"Right Subclavian Artery Angiogram (2nd order — off innominate)",codes:[{cpt:"36216",desc:"Arterial catheter 2nd order (R subclavian off innominate)"},{cpt:"75716-26",desc:"Extremity artery bilateral S&I"}]},
+  {id:"l_subclavian_art",group:"Subclavian & Mammary Angiograms",label:"Left Subclavian Artery Angiogram (1st order — direct off aorta)",codes:[{cpt:"36215",desc:"Arterial catheter 1st order (L subclavian direct off aorta)"},{cpt:"75716-26",desc:"Extremity artery bilateral S&I"}]},
+  {id:"rima_angio",group:"Subclavian & Mammary Angiograms",label:"Right Internal Mammary Artery Angiogram (3rd order — RIMA off R subclavian)",codes:[{cpt:"36217",desc:"Arterial catheter 3rd order (RIMA)"},{cpt:"75756-26",desc:"Internal mammary angio S&I"}]},
+  {id:"lima_angio",group:"Subclavian & Mammary Angiograms",label:"Left Internal Mammary Artery Angiogram (2nd order — LIMA off L subclavian)",codes:[{cpt:"36216",desc:"Arterial catheter 2nd order (LIMA off L subclavian)"},{cpt:"75756-26",desc:"Internal mammary angio S&I"}]},
+  {id:"collateral_subclavian",group:"Subclavian & Mammary Angiograms",label:"Small Collateral(s) off Subclavian / Aorta (each selective vessel)",codes:[{cpt:"36218",desc:"Each additional arterial vessel",hasQty:true},{cpt:"75774-26",desc:"Each add'l vessel S&I",hasQty:true}],note:"Enter quantity = number of distinct small collateral vessels catheterized"},
+  {id:"coronary_congenital",group:"Coronary Angiograms",label:"Coronary Angiogram (during congenital cath — add-on)",codes:[{cpt:"93563",desc:"Coronary angio during congenital cath add-on"}]},
+  {id:"coronary_acquired_full",group:"Coronary Angiograms",label:"Coronary Angiography — Full Acquired (cath placement + all angios bundled)",codes:[{cpt:"93454-26",desc:"Coronary angio includes cath placement and angiograms"}]},
+  {id:"coronary_bypass_graft",group:"Coronary Angiograms",label:"Coronary Angiography via Bypass Graft",codes:[{cpt:"93455-26",desc:"Coronary angio via bypass graft"}]},
+  {id:"coronary_rlh",group:"Coronary Angiograms",label:"Right + Left Heart Cath with Coronary Angiography",codes:[{cpt:"93460-26",desc:"R+L heart cath +/- LV gram"},{cpt:"93563",desc:"Coronary angio add-on (if congenital base used)"}]},
+  {id:"cfr_ffr",group:"Coronary Angiograms",label:"CFR / FFR Measurement — Initial Vessel",codes:[{cpt:"93571",desc:"CFR/FFR initial vessel during coronary angio"}]},
+  {id:"cfr_ffr_add",requires:"cfr_ffr",group:"Coronary Angiograms",label:"CFR / FFR — Each Additional Vessel",codes:[{cpt:"93572",desc:"CFR/FFR each additional vessel",hasQty:true}]},
+];
+
+const BASE_CODES=[
+  {id:"rh_normal",label:"Right Heart Cath — Normal Connections",cpt:"93593-26"},
+  {id:"rh_abnormal",label:"Right Heart Cath — Abnormal Connections",cpt:"93594-26"},
+  {id:"rlh_normal",label:"Right + Left Heart Cath — Normal Connections",cpt:"93596-26"},
+  {id:"rlh_abnormal",label:"Right + Left Heart Cath — Abnormal Connections",cpt:"93597-26"},
+  {id:"lh_only",label:"Left Heart Cath Only",cpt:"93595-26"},
+  {id:"rh_acquired",label:"Right Heart Cath (Non-congenital/Acquired)",cpt:"93451-26"},
+  {id:"lh_acquired",label:"Left Heart Cath (Acquired, incl LV gram)",cpt:"93452-26"},
+  {id:"rlh_acquired",label:"Right + Left Heart Cath (Acquired)",cpt:"93453-26"},
+  {id:"transseptal",label:"Transseptal Puncture (add-on)",cpt:"93462-26"},
+];
+
+const INTERVENTIONS=[
+  {id:"pa_angio_initial",group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Angioplasty — Initial",cpt:"92997"},
+  {id:"pa_angio_add",requires:"pa_angio_initial",group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Angioplasty — Each Additional Branch",cpt:"92998",hasQty:true},
+  {id:"pa_stent_norm_uni",group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Stent — Normal Connections, Unilateral",cpt:"33900"},
+  {id:"pa_stent_norm_bi",group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Stent — Normal Connections, Bilateral",cpt:"33901"},
+  {id:"pa_stent_abn_uni",group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Stent — Abnormal Connections, Unilateral",cpt:"33902"},
+  {id:"pa_stent_abn_bi",group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Stent — Abnormal Connections, Bilateral",cpt:"33903"},
+  {id:"pa_stent_add",requiresAny:["pa_stent_norm_uni","pa_stent_norm_bi","pa_stent_abn_uni","pa_stent_abn_bi"],group:"Pulmonary Artery — Angioplasty & Stenting",label:"PA Stent — Each Additional Branch",cpt:"33904",hasQty:true},
+  {id:"coarc_stent_cross",group:"Aorta & Coarctation — Angioplasty & Stenting",label:"Coarctation Stent — Crossing LSCA / Major Branches",cpt:"33894"},
+  {id:"coarc_stent_no",group:"Aorta & Coarctation — Angioplasty & Stenting",label:"Coarctation Stent — Not Crossing LSCA",cpt:"33895"},
+  {id:"coarc_angio_only",group:"Aorta & Coarctation — Angioplasty & Stenting",label:"Coarctation Balloon Angioplasty (No Stent)",cpt:"33897"},
+  {id:"covered_cross",group:"Aorta & Coarctation — Angioplasty & Stenting",label:"Covered Stent for Aortic Injury — Crossing LSCA",cpt:"33880"},
+  {id:"covered_no",group:"Aorta & Coarctation — Angioplasty & Stenting",label:"Covered Stent for Aortic Injury — Not Crossing LSCA",cpt:"33895"},
+  {id:"pda_stent_uni",group:"PDA — Stenting",label:"PDA Stent — Within PDA Only (Abnormal Connections, Unilateral)",cpt:"33902"},
+  {id:"pda_stent_bi",group:"PDA — Stenting",label:"PDA Stent — Extending into Branch PAs (Bilateral)",cpt:"33903"},
+  {id:"intracardiac_stent",group:"Intracardiac — Stenting",label:"Intracardiac Stent — Initial (atrial septum / Fontan / pulm vein / RVOT / Mustard)",cpt:"33745"},
+  {id:"intracardiac_add",requires:"intracardiac_stent",group:"Intracardiac — Stenting",label:"Intracardiac Stent — Each Additional",cpt:"33746",hasQty:true},
+  {id:"atrial_septostomy",group:"Intracardiac — Stenting",label:"Atrial Septostomy (Rashkind / static / balloon)",cpt:"33741"},
+  {id:"hybrid_stent",group:"Intracardiac — Stenting",label:"Hybrid Stent Placement",cpt:"33621"},
+  {id:"ue_angio",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Upper Extremity Artery Angioplasty — Initial (subclavian / axillary / brachial)",cpt:"37246"},
+  {id:"renal_angio",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Renal Artery Angioplasty — Initial",cpt:"37246"},
+  {id:"ue_angio_add",requires:"ue_angio",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Upper Extremity Artery Angioplasty — Each Additional",cpt:"37247",hasQty:true},
+  {id:"renal_angio_add",requires:"renal_angio",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Renal Artery Angioplasty — Each Additional",cpt:"37247",hasQty:true},
+  {id:"ue_stent_init",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Upper Extremity Stent — Initial",cpt:"37236"},
+  {id:"ue_stent_add",requires:"ue_stent_init",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Upper Extremity Stent — Each Additional",cpt:"37237",hasQty:true},
+  {id:"innominate_stent",group:"Upper Extremity & Head/Neck — Angioplasty & Stenting",label:"Innominate / Subclavian Artery Stent",cpt:"37221"},
+  {id:"iliac_angio",group:"Iliac & Femoral — Angioplasty & Stenting",label:"Iliac Artery Angioplasty",cpt:"37220"},
+  {id:"iliac_stent",group:"Iliac & Femoral — Angioplasty & Stenting",label:"Iliac Artery Stent",cpt:"37221"},
+  {id:"femoral_angio",group:"Iliac & Femoral — Angioplasty & Stenting",label:"Femoral Artery Angioplasty",cpt:"37224"},
+  {id:"femoral_stent",group:"Iliac & Femoral — Angioplasty & Stenting",label:"Femoral Artery Stent",cpt:"37226"},
+  {id:"venous_angio_init",group:"Venous — Angioplasty & Stenting",label:"Venous Angioplasty (IVC / SVC / peripheral) — Initial",cpt:"37248"},
+  {id:"venous_angio_add",requires:"venous_angio_init",group:"Venous — Angioplasty & Stenting",label:"Venous Angioplasty — Each Additional",cpt:"37249",hasQty:true},
+  {id:"venous_stent_init",group:"Venous — Angioplasty & Stenting",label:"Venous Stent — Initial",cpt:"37238"},
+  {id:"venous_stent_add",requires:"venous_stent_init",group:"Venous — Angioplasty & Stenting",label:"Venous Stent — Each Additional",cpt:"37239",hasQty:true},
+  {id:"unlisted_stent",group:"Miscellaneous — Stenting",label:"Unlisted Stent Insertion, Percutaneous",cpt:"93799-26"},
+  {id:"pv_valvoplasty",group:"Valvoplasty & Valve Implants",label:"Pulmonary Valvoplasty (Balloon)",cpt:"92990"},
+  {id:"av_valvoplasty",group:"Valvoplasty & Valve Implants",label:"Aortic Valvoplasty (Balloon)",cpt:"92986"},
+  {id:"mv_valvoplasty",group:"Valvoplasty & Valve Implants",label:"Mitral Valvoplasty (Balloon)",cpt:"92987"},
+  {id:"tv_valvoplasty",group:"Valvoplasty & Valve Implants",label:"Tricuspid Valvoplasty",cpt:"93799-26"},
+  {id:"tpvr",group:"Valvoplasty & Valve Implants",label:"Transcatheter Pulmonary Valve Implantation (Melody / Sapien)",cpt:"33477"},
+  {id:"tavr",group:"Valvoplasty & Valve Implants",label:"Aortic Valve Implantation — Transcatheter (TAVR)",cpt:"33361"},
+  {id:"av_paravalvar",group:"Valvoplasty & Valve Implants",label:"Aortic Paravalvar Leak Closure",cpt:"93591"},
+  {id:"mv_paravalvar",group:"Valvoplasty & Valve Implants",label:"Mitral Paravalvar Leak Closure",cpt:"93590"},
+  {id:"paravalvar_add",requiresAny:["av_paravalvar","mv_paravalvar"],group:"Valvoplasty & Valve Implants",label:"Paravalvar Leak Closure — Each Additional Device",cpt:"93592",hasQty:true},
+  {id:"asd_closure",group:"Defect & Vessel Occlusion",label:"ASD / PFO / Fontan Fenestration Closure",cpt:"93580"},
+  {id:"vsd_closure",group:"Defect & Vessel Occlusion",label:"VSD Closure",cpt:"93581"},
+  {id:"pda_closure",group:"Defect & Vessel Occlusion",label:"PDA Device Closure",cpt:"93582"},
+  {id:"embo_venous",group:"Defect & Vessel Occlusion",label:"Occlusion — Venous (veno-venous collaterals)",cpt:"37241",hasQty:true,maxQty:2},
+  {id:"embo_arterial",group:"Defect & Vessel Occlusion",label:"Occlusion — Arterial (MAPCAs, fistulas, AVMs, pulm flow restrictors — max 2 vessels)",cpt:"37242",hasQty:true,maxQty:2},
+  {id:"embo_hemorrhage",group:"Defect & Vessel Occlusion",label:"Embolization — Hemorrhage",cpt:"37244",hasQty:true},
+  {id:"cor_stent_init",group:"Coronary Interventions",label:"Coronary Stent — Initial Per Site (incl PTCA)",cpt:"92928"},
+  {id:"cor_stent_add",requires:"cor_stent_init",group:"Coronary Interventions",label:"Coronary Stent — Additional Branch",cpt:"92929",hasQty:true},
+  {id:"ptca_init",group:"Coronary Interventions",label:"PTCA — Initial (LM / LAD / LCx / RCA / Rint)",cpt:"92920"},
+  {id:"ptca_add",requires:"ptca_init",group:"Coronary Interventions",label:"PTCA — Additional Branch",cpt:"92921",hasQty:true},
+  {id:"bypass_plasty",group:"Coronary Interventions",label:"Bypass Graft Angioplasty or Stent",cpt:"92937"},
+  {id:"ivus_cor_init",group:"Coronary Interventions",label:"IVUS — Coronary, Initial Vessel",cpt:"92978"},
+  {id:"ivus_cor_add",requires:"ivus_cor_init",group:"Coronary Interventions",label:"IVUS — Coronary, Each Additional",cpt:"92979",hasQty:true},
+  {id:"impella",group:"Hemodynamic Support / ECMO",label:"Impella — Arterial Support",cpt:"33990"},
+  {id:"impella_rem",group:"Hemodynamic Support / ECMO",label:"Impella — Removal",cpt:"33992"},
+  {id:"ecmo_lt5",group:"Hemodynamic Support / ECMO",label:"Percutaneous ECMO Placement (less than or equal to 5 yrs)",cpt:"33951"},
+  {id:"ecmo_gt6",group:"Hemodynamic Support / ECMO",label:"Percutaneous ECMO Placement (6 yrs and older)",cpt:"33952"},
+  {id:"biopsy",group:"Other Procedures",label:"Endomyocardial Biopsy",cpt:"93505"},
+  {id:"thermodilution",group:"Other Procedures",label:"Thermodilution Cardiac Output",cpt:"93598",hasQty:true},
+  {id:"pharm_agent",group:"Other Procedures",label:"Pharmacologic Agent Administration with Hemodynamics (add-on)",cpt:"93463"},
+  {id:"ino_study",group:"Other Procedures",label:"iNO (Inhaled Nitric Oxide) Drug Study with Hemodynamics (add-on)",cpt:"93463"},
+  {id:"exercise_study",group:"Other Procedures",label:"Exercise Study with Hemodynamics (add-on)",cpt:"93464"},
+  {id:"foreign_body",group:"Other Procedures",label:"Foreign Body Retrieval",cpt:"37197"},
+  {id:"temp_atrial",group:"Other Procedures",label:"Temporary Pacemaker — Atrial",cpt:"93610-26"},
+  {id:"temp_ventricular",group:"Other Procedures",label:"Temporary Pacemaker — Ventricular",cpt:"93612-26"},
+  {id:"cardioversion",group:"Other Procedures",label:"Cardioversion, Elective, External",cpt:"92960"},
+  {id:"cardiomems",group:"Other Procedures",label:"CardioMEMS Implant",cpt:"33289"},
+  {id:"transfusion",group:"Other Procedures",label:"Transfusion — Blood or Blood Components",cpt:"36430"},
+  {id:"pericardio_no_drain",group:"Centesis & Drains",label:"Pericardiocentesis — No Drain",cpt:"33016"},
+  {id:"pericardio_drain_gt6",group:"Centesis & Drains",label:"Pericardiocentesis w/ Drain — greater than 6 yrs, no CHD",cpt:"33017"},
+  {id:"pericardio_drain_lt5",group:"Centesis & Drains",label:"Pericardiocentesis w/ Drain — 5 yrs or less, or any CHD",cpt:"33018"},
+  {id:"thoracentesis_no",group:"Centesis & Drains",label:"Thoracentesis — No Drain, No Imaging",cpt:"32554"},
+  {id:"thoracentesis_img",group:"Centesis & Drains",label:"Thoracentesis — No Drain, With Imaging",cpt:"32555"},
+  {id:"thoracentesis_drain",group:"Centesis & Drains",label:"Thoracentesis w/ Drain (incl imaging)",cpt:"32557"},
+  {id:"ice",group:"Imaging",label:"ICE (Intracardiac Echo), add-on",cpt:"93662"},
+  {id:"ivus_noncoronary",group:"Imaging",label:"IVUS — Non-coronary, Initial",cpt:"37252"},
+  {id:"ivus_nc_add",requires:"ivus_noncoronary",group:"Imaging",label:"IVUS — Non-coronary, Each Additional",cpt:"37253",hasQty:true},
+  {id:"fluoroscopy",group:"Imaging",label:"Fluoroscopy",cpt:"76000-26"},
+  {id:"thrombectomy_art",group:"Thrombolysis / Thrombectomy",label:"Mechanical Thrombectomy — Arterial, Primary",cpt:"37184"},
+  {id:"thrombectomy_art2",requires:"thrombectomy_art",group:"Thrombolysis / Thrombectomy",label:"Mechanical Thrombectomy — Arterial, Each Additional",cpt:"37185",hasQty:true},
+  {id:"thrombectomy_ven",group:"Thrombolysis / Thrombectomy",label:"Mechanical Thrombectomy — Venous, Initial",cpt:"37187"},
+  {id:"thrombolysis_art",group:"Thrombolysis / Thrombectomy",label:"Arterial Thrombolysis (TPA) — Initial Day",cpt:"37211"},
+  {id:"thrombolysis_ven",group:"Thrombolysis / Thrombectomy",label:"Venous Thrombolysis (TPA) — Initial Day",cpt:"37212"},
+];
+
+const ACCESS_CODES=[
+  {id:"umbilical_art",label:"Umbilical Artery Catheter — Newborn",cpt:"36660"},
+  {id:"umbilical_vein",label:"Umbilical Vein Catheter — Newborn",cpt:"36510"},
+  {id:"art_puncture",label:"Arterial Puncture Only (blood sample)",cpt:"36600"},
+  {id:"carotid_access",label:"Carotid / Vertebral Artery Vascular Access",cpt:"36100"},
+  {id:"extremity_access",label:"Extremity / Axillary Artery Access",cpt:"36140"},
+  {id:"art_line",label:"Arterial Line Placement",cpt:"36620"},
+  {id:"cvl_lt5_no",label:"Central Venous Line — No Tunnel, less than 5 yrs",cpt:"36555"},
+  {id:"cvl_gt5_no",label:"Central Venous Line — No Tunnel, 5 yrs or older",cpt:"36556"},
+  {id:"cvl_lt5_tun",label:"Central Venous Line — Tunneled, less than 5 yrs",cpt:"36557"},
+  {id:"cvl_gt5_tun",label:"Central Venous Line — Tunneled, 5 yrs or older",cpt:"36558"},
+  {id:"cvl_fluoro",label:"Fluoroscopy Guidance for CVL (add-on)",cpt:"77001-26"},
+  {id:"cvl_reposition",label:"CVL Repositioning (incl fluoro)",cpt:"36597"},
+  {id:"picc_lt5",label:"PICC Line — less than 5 yrs",cpt:"36568"},
+  {id:"picc_gt5",label:"PICC Line — 5 yrs or older",cpt:"36569"},
+  {id:"picc_img_lt5",label:"PICC with Imaging — less than 5 yrs",cpt:"36572"},
+  {id:"picc_img_gt5",label:"PICC with Imaging — 5 yrs or older",cpt:"36573"},
+  {id:"picc_replace",label:"PICC Replacement",cpt:"36584"},
+  {id:"tunneled_remove",label:"Removal of Tunneled Line",cpt:"36589"},
+  {id:"us_access",label:"US-Guided Vascular Access (add-on)",cpt:"76937"},
+  {id:"carotid_cutdown",label:"Carotid Cutdown",cpt:"36625"},
+  {id:"carotid_repair",label:"Carotid Repair",cpt:"35201"},
+];
+
+const MODIFIERS=[
+  {id:"mod_63",code:"63",label:"Infant less than 4 kg",note:"Weight must be listed in procedure note"},
+  {id:"mod_22",code:"22",label:"Complex/Difficult Procedure",note:"Documentation must support increased complexity"},
+  {id:"mod_80",code:"80",label:"Second Interventionalist",note:"2 separate operative notes required; list primary operator"},
+];
+
+
+const WRVU = {
+  // Base cath codes (-26 professional component)
+  "93593-26":3.89,"93594-26":5.95,"93595-26":5.36,"93596-26":6.67,"93597-26":8.66,
+  "93451-26":2.41,"93452-26":4.39,"93453-26":5.84,"93462-26":3.64,
+  "93454-26":4.43,"93455-26":5.16,"93460-26":6.92,
+  // Angio add-ons
+  "93563":0.98,"93565":0.49,"93566":0.49,"93567":0.68,"93568":0.86,
+  // Catheter placements
+  "36010":2.13,"36011":3.06,"36012":3.42,"36013":2.46,"36014":2.94,"36015":3.42,
+  "36200":2.70,"36140":1.72,"36120":1.72,"36215":4.07,"36216":5.14,"36217":6.13,"36218":0.98,
+  "36100":2.94,
+  // S&I codes (-26)
+  "75605-26":1.11,"75625-26":1.40,"75710-26":1.71,"75716-26":1.92,
+  "75726-26":2.00,"75756-26":1.11,"75774-26":0.98,
+  "75820-26":1.02,"75825-26":1.11,"75827-26":1.11,"75891-26":1.11,
+  "93584-26":1.17,"93585-26":1.10,
+  "76000-26":0.30,"76937":0.29,"77001-26":0.37,
+  // Interventions
+  "92997":11.68,"92998":5.84,
+  "33900":10.75,"33901":14.14,"33902":13.65,"33903":16.09,"33904":5.39,
+  "33894":17.81,"33895":14.18,"33897":10.54,"33880":26.33,
+  "33745":19.50,"33746":7.80,"33741":13.65,"33621":15.78,
+  "37246":6.83,"37247":3.41,"37236":8.53,"37237":4.14,
+  "37220":5.85,"37221":5.89,"37224":6.83,"37226":8.53,
+  "37248":5.85,"37249":2.90,"37238":5.89,"37239":2.90,
+  "93799-26":0,
+  // Valves
+  "92990":17.81,"92986":22.04,"92987":22.80,"33477":24.38,"33361":21.91,
+  "93591":17.52,"93590":21.16,"93592":7.80,
+  // Defect/occlusion
+  "93580":17.52,"93581":23.78,"93582":12.00,
+  "37241":8.53,"37242":9.56,"37244":13.41,
+  // Coronary
+  "92928":9.75,"92929":4.88,"92920":8.14,"92921":4.07,"92937":11.02,
+  "92978-26":1.76,"92979-26":1.40,
+  // Hemodynamic support
+  "33990":6.58,"33992":3.46,"33951":7.95,"33952":7.95,
+  // Other procedures
+  "93505":4.02,"93598-26":1.40,"93463":1.95,"93464":1.76,
+  "37197":5.89,"93610-26":2.94,"93612-26":2.94,"92960":1.95,
+  "33289":5.85,"36430":0,
+  // Centesis
+  "33016":4.29,"33017":4.50,"33018":5.27,
+  "32554":1.77,"32555":2.21,"32557":3.04,
+  // Imaging
+  "93662-26":1.40,"37252":1.76,"37253":1.40,"76000-26":0.30,
+  // Thrombolysis
+  "37184":8.20,"37185":3.20,"37187":7.59,"37211":7.56,"37212":6.64,
+  // Access
+  "36660":1.37,"36510":1.06,"36600":0.31,"36100":2.94,"36140":1.72,"36620":0.98,
+  "36555":1.88,"36556":1.71,"36557":4.77,"36558":4.48,
+  "77001-26":0.37,"36597":1.18,
+  "36568":2.06,"36569":1.85,"36572":1.77,"36573":1.66,
+  "36584":1.17,"36589":2.22,"76937":0.29,
+  "36625":2.06,"35201":16.51,
+  // CFR/FFR
+  "93571-26":1.76,"93572-26":1.40,
+};
+
+const TABS=["Base Cath","Angios","Interventions","Access","Summary","wRVU"];
+
+function groupBy(arr,key){return arr.reduce((a,i)=>{const g=i[key]||"Other";if(!a[g])a[g]=[];a[g].push(i);return a;},{});}
+
+function isLocked(item, selectedSet){
+  if(item.requires) return !selectedSet.has(item.requires);
+  if(item.requiresAny) return !item.requiresAny.some(r=>selectedSet.has(r));
+  return false;
+}
+
+const S={
+  page:{minHeight:"100vh",background:"#0a1628",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#e2e8f0",maxWidth:680,margin:"0 auto"},
+  hdr:{background:"linear-gradient(135deg,#0f2744 0%,#0a1628 100%)",padding:"18px 14px 0",borderBottom:"1px solid rgba(56,189,248,0.15)"},
+  content:{padding:"12px 12px 80px"},
+};
+
+function QtyInput({value,onChange,maxQty}){
+  const mx=maxQty||20;
+  return <input type="number" min={1} max={mx} value={value}
+    onChange={e=>onChange(Math.max(1,Math.min(mx,parseInt(e.target.value)||1)))}
+    onClick={e=>e.stopPropagation()}
+    style={{width:44,marginLeft:8,padding:"2px 6px",background:"#1e293b",border:"1px solid #38bdf8",color:"#38bdf8",borderRadius:4,fontSize:13,textAlign:"center"}}/>;
+}
+
+function ToggleRow({label,cpt,selected,onToggle,qty,onQtyChange,hasQty,note,maxQty,locked,lockMsg}){
+  return(
+    <div onClick={locked?undefined:onToggle} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",marginBottom:4,borderRadius:8,cursor:locked?"not-allowed":"pointer",userSelect:"none",
+      opacity:locked?0.38:1,
+      background:selected?"rgba(56,189,248,0.12)":"rgba(255,255,255,0.03)",
+      border:selected?"1px solid rgba(56,189,248,0.4)":locked?"1px solid rgba(255,255,255,0.04)":"1px solid rgba(255,255,255,0.07)"}}>
+      <div style={{width:20,height:20,borderRadius:4,flexShrink:0,marginTop:1,
+        background:selected?"#38bdf8":"transparent",border:selected?"2px solid #38bdf8":"2px solid #475569",
+        display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {selected&&<span style={{color:"#0f172a",fontSize:13,fontWeight:700}}>✓</span>}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6}}>
+          <span style={{fontSize:13,color:selected?"#e2e8f0":"#94a3b8",lineHeight:1.4}}>{label}</span>
+          {hasQty&&selected&&<QtyInput value={qty||1} onChange={onQtyChange} maxQty={maxQty}/>}
+        </div>
+        {cpt&&<div style={{fontSize:11,color:"#38bdf8",marginTop:2,fontFamily:"monospace"}}>{cpt}</div>}
+        {note&&selected&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>⚠ {note}</div>}
+        {locked&&<div style={{fontSize:10,color:"#64748b",marginTop:2,fontStyle:"italic"}}>🔒 {lockMsg||"Select initial code first"}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ClinicalButton({btn,selected,onToggle,quantities,onQtyChange,locked}){
+  return(
+    <div onClick={locked?undefined:()=>onToggle(btn.id)} style={{padding:"11px 13px",borderRadius:10,marginBottom:5,cursor:locked?"not-allowed":"pointer",userSelect:"none",
+      opacity:locked?0.38:1,
+      background:selected?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.03)",
+      border:selected?"1px solid rgba(56,189,248,0.5)":locked?"1px solid rgba(255,255,255,0.04)":"1px solid rgba(255,255,255,0.08)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:21,height:21,borderRadius:5,flexShrink:0,background:selected?"#38bdf8":"transparent",
+          border:selected?"2px solid #38bdf8":"2px solid #475569",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {selected&&<span style={{color:"#0f172a",fontSize:13,fontWeight:700}}>✓</span>}
+        </div>
+        <span style={{fontSize:13,fontWeight:600,color:locked?"#475569":selected?"#e2e8f0":"#94a3b8"}}>{btn.label}</span>
+        {locked&&<span style={{fontSize:10,color:"#475569",marginLeft:4}}>🔒</span>}
+      </div>
+      {selected&&(
+        <div style={{marginTop:8,paddingLeft:31}}>
+          {btn.codes.map((c,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+              <span style={{fontFamily:"monospace",fontSize:11,color:"#38bdf8",minWidth:78}}>{c.cpt}</span>
+              <span style={{fontSize:11,color:"#64748b",flex:1}}>{c.desc}</span>
+              {c.hasQty&&<QtyInput value={quantities[btn.id+"_"+i]||c.qty||1} onChange={v=>onQtyChange(btn.id+"_"+i,v)}/>}
+              {!c.hasQty&&c.qty>1&&<span style={{fontSize:11,color:"#f59e0b"}}>x{c.qty}</span>}
+            </div>
+          ))}
+          {btn.note&&<div style={{fontSize:11,color:"#f59e0b",marginTop:4}}>⚠ {btn.note}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SecHead({title,onClear,count}){
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 0 5px",borderBottom:"1px solid rgba(56,189,248,0.2)",marginBottom:7}}>
+      <span style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"#38bdf8"}}>
+        {title}{count>0&&<span style={{marginLeft:6,background:"rgba(56,189,248,0.2)",color:"#38bdf8",borderRadius:8,fontSize:9,padding:"1px 5px"}}>{count}</span>}
+      </span>
+      {onClear&&count>0&&(
+        <button onClick={e=>{e.stopPropagation();onClear();}}
+          style={{fontSize:10,color:"#ef4444",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontWeight:600}}>
+          CLEAR
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ClearAllBar({onClear}){
+  return(
+    <button onClick={onClear} style={{width:"100%",padding:"11px",marginBottom:14,borderRadius:8,
+      border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.08)",
+      color:"#ef4444",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+      🗑 CLEAR ALL SELECTIONS IN THIS TAB
+    </button>
+  );
+}
+
+function App(){
+  const [tab,setTab]=useState(0);
+  const [info,setInfo]=useState({date:new Date().toISOString().split('T')[0],provider:"",caseNum:"1"});
+  const [selBase,setSelBase]=useState(new Set());
+  const [selAngios,setSelAngios]=useState(new Set());
+  const [selInt,setSelInt]=useState(new Set());
+  const [selAccess,setSelAccess]=useState(new Set());
+  const [selMods,setSelMods]=useState(new Set());
+  const [qty,setQty]=useState({});
+  const [showReset,setShowReset]=useState(false);
+  const [intSearch,setIntSearch]=useState("");
+  const [copied,setCopied]=useState(false);
+
+  const tog=(fn,id,allItems,otherFn)=>{
+    fn(p=>{
+      const n=new Set(p);
+      if(n.has(id)){
+        n.delete(id);
+        // auto-deselect any add-ons that require this id
+        if(allItems) allItems.forEach(item=>{
+          if(item.requires===id||(item.requiresAny&&item.requiresAny.includes(id)&&item.requiresAny.every(r=>r===id||!n.has(r)))){
+            n.delete(item.id);
+          }
+        });
+      } else { n.add(id); }
+      return n;
+    });
+  };
+  const getQ=(k,d=1)=>qty[k]||d;
+  const setQ=(k,v)=>setQty(p=>({...p,[k]:v}));
+
+  const clearAngioGroup=(group)=>{
+    const ids=ANGIO_BUTTONS.filter(b=>b.group===group).map(b=>b.id);
+    setSelAngios(prev=>{const n=new Set(prev);ids.forEach(id=>n.delete(id));return n;});
+  };
+  const clearIntGroup=(group)=>{
+    const ids=INTERVENTIONS.filter(c=>c.group===group).map(c=>c.id);
+    setSelInt(prev=>{const n=new Set(prev);ids.forEach(id=>n.delete(id));return n;});
+  };
+  const newCase=()=>{
+    setSelBase(new Set());setSelAngios(new Set());setSelInt(new Set());
+    setSelAccess(new Set());setSelMods(new Set());setQty({});
+    setInfo({date:"",provider:"",caseNum:"1"});setShowReset(false);setTab(0);
+  };
+
+  const buildSummary=()=>{
+    const lines=[];
+    BASE_CODES.filter(c=>selBase.has(c.id)).forEach(c=>lines.push({cpt:c.cpt,desc:c.label,qty:1,sec:"Base Catheterization"}));
+    ANGIO_BUTTONS.filter(b=>selAngios.has(b.id)).forEach(b=>{
+      b.codes.forEach((c,i)=>{
+        const q=c.hasQty?getQ(b.id+"_"+i,c.qty||1):(c.qty||1);
+        lines.push({cpt:c.cpt,desc:"["+b.label+"] "+c.desc,qty:q,sec:"Angiography"});
+      });
+    });
+    INTERVENTIONS.filter(c=>selInt.has(c.id)).forEach(c=>lines.push({cpt:c.cpt,desc:c.label,qty:c.hasQty?getQ(c.id):1,sec:c.group}));
+    ACCESS_CODES.filter(c=>selAccess.has(c.id)).forEach(c=>lines.push({cpt:c.cpt,desc:c.label,qty:1,sec:"Vascular Access"}));
+    return lines;
+  };
+
+  const summary=buildSummary();
+  const activeMods=MODIFIERS.filter(m=>selMods.has(m.id));
+  const angiGroups=groupBy(ANGIO_BUTTONS,"group");
+  const intGroups=groupBy(INTERVENTIONS,"group");
+  const badge=i=>[selBase.size,selAngios.size,selInt.size,selAccess.size,summary.length,0][i]||0;
+
+  const getWrvu=(cpt)=>{
+    // Try exact match first, then strip -26 for codes that only exist globally
+    const val=WRVU[cpt];
+    if(val!==undefined) return val;
+    // Try base code without modifier
+    const base=cpt.replace(/-26$/,'');
+    return WRVU[base]||0;
+  };
+
+  const totalWrvu=summary.reduce((sum,l)=>{
+    const rv=getWrvu(l.cpt);
+    return sum+rv*(l.qty||1);
+  },0);
+
+  const doCopy=()=>{
+    const hdr="CARDIAC CATH CHARGE CAPTURE\n"+"-".repeat(48)+"\nDate: "+(info.date||"___")+"  |  Provider: "+(info.provider||"___")+"  |  Case #"+info.caseNum+"\n"+"-".repeat(48)+"\n";
+    const mLine=activeMods.length?"\nMODIFIERS: "+activeMods.map(m=>"-"+m.code+" ("+m.label+")").join(", ")+"\n":"";
+    const secs={};
+    summary.forEach(l=>{if(!secs[l.sec])secs[l.sec]=[];secs[l.sec].push("  "+l.cpt+(l.qty>1?" x"+l.qty:"")+"  |  "+l.desc);});
+    const body=Object.entries(secs).map(([s,ls])=>"\n"+s.toUpperCase()+"\n"+ls.join("\n")).join("\n");
+    const text=hdr+mLine+body+"\n\n"+"-".repeat(48)+"\nTOTAL CODES: "+summary.length;
+    navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});
+  };
+
+  const doPrint=()=>{
+    const secs={};
+    summary.forEach(l=>{if(!secs[l.sec])secs[l.sec]=[];secs[l.sec].push(l);});
+    const mLine=activeMods.length?"MODIFIERS: "+activeMods.map(m=>"-"+m.code+" ("+m.label+")").join(", "):"";
+    const displayDate=info.date?new Date(info.date+"T12:00:00").toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}):info.date||"___";
+    let sections="";
+    Object.entries(secs).forEach(([s,ls])=>{
+      sections+="<div style='margin-bottom:18px'>";
+      sections+="<div style='font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#1e3a5f;border-bottom:2px solid #1e3a5f;padding-bottom:4px;margin-bottom:8px'>"+s+"</div>";
+      ls.forEach(l=>{
+        sections+="<div style='display:flex;gap:16px;padding:5px 0;border-bottom:1px solid #eee;align-items:baseline'>";
+        sections+="<div style='font-family:Courier New,monospace;font-weight:700;font-size:13px;color:#0f2744;min-width:110px;flex-shrink:0'>"+l.cpt+(l.qty>1?" ×"+l.qty:"")+"</div>";
+        sections+="<div style='font-size:12px;color:#333;flex:1'>"+l.desc+"</div>";
+        sections+="</div>";
+      });
+      sections+="</div>";
+    });
+    const printHTML="<!DOCTYPE html><html><head><meta charset='UTF-8'>"+
+      "<meta name='viewport' content='width=device-width,initial-scale=1'>"+
+      "<title>Cath Charges - "+(info.provider||"")+" - "+displayDate+"</title>"+
+      "<style>"+
+      "body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:24px;background:white;color:#111;max-width:720px;margin:0 auto;}"+
+      "@media print{body{padding:16px;} .no-print{display:none!important;} @page{margin:1cm;}}"+
+      "h1{font-size:20px;font-weight:700;margin:0;}"+
+      ".subtitle{font-size:12px;color:#555;margin-top:2px;}"+
+      ".header-block{border-bottom:3px solid #0f2744;padding-bottom:14px;margin-bottom:16px;}"+
+      ".meta{display:flex;gap:24px;margin-bottom:16px;font-size:13px;background:#f0f6ff;padding:10px 14px;border-radius:6px;}"+
+      ".meta b{color:#0f2744;}"+
+      ".modifier-box{background:#fff8e1;border:1px solid #e6b800;padding:8px 14px;margin-bottom:16px;border-radius:5px;font-size:12px;font-weight:600;color:#7a5800;}"+
+      ".footer{margin-top:24px;padding-top:12px;border-top:2px solid #0f2744;display:flex;justify-content:space-between;font-size:12px;color:#555;}"+
+      ".print-btn{display:block;width:100%;padding:14px;background:#0f2744;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:20px;letter-spacing:0.03em;}"+
+      ".share-hint{font-size:12px;color:#666;text-align:center;margin-bottom:20px;}"+
+      "</style></head><body>"+
+      "<button class='print-btn no-print' onclick='window.print()'>🖨 Print / Save as PDF</button>"+
+      "<div class='share-hint no-print'>On iPhone: tap the Share button in Safari to Email, Message, or Save as PDF</div>"+
+      "<div class='header-block'>"+
+      "<h1>Cardiac Cath Charge Capture</h1>"+
+      "<div class='subtitle'>Congenital / Pediatric Cardiac Catheterization</div>"+
+      "</div>"+
+      "<div class='meta'>"+
+      "<div><b>Date:</b> "+displayDate+"</div>"+
+      "<div><b>Provider:</b> "+(info.provider||"___")+"</div>"+
+      "<div><b>Case:</b> #"+info.caseNum+"</div>"+
+      "</div>"+
+      (mLine?"<div class='modifier-box'>"+mLine+"</div>":"")+
+      sections+
+      "<div class='footer'>"+
+      "<span><b>Total CPT codes: "+summary.length+"</b></span>"+
+      "<span>Generated: "+new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})+"</span>"+
+      "</div></body></html>";
+    const win=window.open("","_blank");
+    if(win){win.document.write(printHTML);win.document.close();}
+    else{alert("Please allow pop-ups for this site, then try again.");}
+  };
+
+  return(
+    <div style={S.page}>
+      {/* HEADER */}
+      <div style={S.hdr}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+          <div style={{width:34,height:34,borderRadius:8,background:"linear-gradient(135deg,#0ea5e9,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>❤</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:700}}>Cath Lab Charge Capture</div>
+            <div style={{fontSize:10,color:"#64748b"}}>Congenital / Pediatric Cardiac Catheterization</div>
+          </div>
+          {!showReset
+            ?<button onClick={()=>setShowReset(true)} style={{fontSize:11,color:"#f59e0b",background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:700,whiteSpace:"nowrap"}}>+ New Case</button>
+            :<div style={{display:"flex",gap:6}}>
+              <button onClick={newCase} style={{fontSize:11,color:"white",background:"#ef4444",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:700}}>Confirm Reset</button>
+              <button onClick={()=>setShowReset(false)} style={{fontSize:11,color:"#94a3b8",background:"rgba(255,255,255,0.08)",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:700}}>Cancel</button>
+            </div>
+          }
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px",gap:6,marginBottom:12}}>
+          {[["date","Procedure Date"],["provider","Provider"]].map(([f,ph])=>(
+            <input key={f} type={f==="date"?"date":"text"} placeholder={ph} value={info[f]} onChange={e=>setInfo(p=>({...p,[f]:e.target.value}))}
+              style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,padding:"7px 10px",color:"#e2e8f0",fontSize:12,outline:"none",colorScheme:"dark"}}/>
+          ))}
+          <select value={info.caseNum} onChange={e=>setInfo(p=>({...p,caseNum:e.target.value}))}
+            style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,padding:"7px 8px",color:"#e2e8f0",fontSize:12,outline:"none"}}>
+            <option value="1">Case 1</option>
+            <option value="2">Case 2</option>
+          </select>
+        </div>
+        <div style={{display:"flex",gap:1,overflowX:"auto"}}>
+          {TABS.map((t,i)=>{
+            const b=badge(i);
+            return(
+              <button key={t} onClick={()=>setTab(i)} style={{padding:"7px 11px",fontSize:11,fontWeight:600,border:"none",borderRadius:"6px 6px 0 0",cursor:"pointer",whiteSpace:"nowrap",
+                background:tab===i?"#0a1628":"transparent",color:tab===i?"#38bdf8":"#64748b",
+                borderBottom:tab===i?"2px solid #38bdf8":"2px solid transparent"}}>
+                {t}{b>0&&<span style={{marginLeft:4,background:i===4?"#22c55e":"#38bdf8",color:"#0a1628",borderRadius:10,fontSize:9,fontWeight:700,padding:"1px 4px"}}>{b}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={S.content}>
+
+        {/* BASE CATH */}
+        {tab===0&&(
+          <div>
+            {(selBase.size>0||selMods.size>0)&&<ClearAllBar onClear={()=>{setSelBase(new Set());setSelMods(new Set());}}/>}
+            <SecHead title="Base Catheterization Code (select one)" onClear={()=>setSelBase(new Set())} count={selBase.size}/>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>This anchors all add-on angiography codes.</div>
+            {BASE_CODES.map(c=><ToggleRow key={c.id} label={c.label} cpt={c.cpt} selected={selBase.has(c.id)} onToggle={()=>tog(setSelBase,c.id)}/>)}
+            <SecHead title="Modifiers" onClear={()=>setSelMods(new Set())} count={selMods.size}/>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Apply to relevant codes in summary.</div>
+            {MODIFIERS.map(m=><ToggleRow key={m.id} label={"Modifier -"+m.code+" — "+m.label} note={m.note} cpt={"-"+m.code} selected={selMods.has(m.id)} onToggle={()=>tog(setSelMods,m.id)}/>)}
+          </div>
+        )}
+
+        {/* ANGIOS */}
+        {tab===1&&(
+          <div>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>Each button auto-selects catheter placement + S&I. -26 modifier pre-applied to all S&I codes.</div>
+            {selAngios.size>0&&<ClearAllBar onClear={()=>setSelAngios(new Set())}/>}
+            {Object.entries(angiGroups).map(([g,btns])=>{
+              const gc=btns.filter(b=>selAngios.has(b.id)).length;
+              return(
+                <div key={g}>
+                  <SecHead title={g} onClear={()=>clearAngioGroup(g)} count={gc}/>
+                  {btns.map(btn=>{const lk=isLocked(btn,selAngios);return(<ClinicalButton key={btn.id} btn={btn} selected={selAngios.has(btn.id)} onToggle={id=>tog(setSelAngios,id,ANGIO_BUTTONS)} quantities={qty} onQtyChange={setQ} locked={lk}/>);})}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* INTERVENTIONS */}
+        {tab===2&&(
+          <div>
+            <div style={{position:"sticky",top:0,zIndex:10,background:"#0a1628",paddingBottom:10,paddingTop:4}}>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#475569",pointerEvents:"none"}}>🔍</span>
+                <input placeholder="Search interventions... (e.g. PA stent, coarc, ASD)" value={intSearch} onChange={e=>setIntSearch(e.target.value)}
+                  style={{width:"100%",boxSizing:"border-box",padding:"10px 36px 10px 34px",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(56,189,248,0.3)",borderRadius:9,color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+                {intSearch&&<button onClick={()=>setIntSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#64748b",fontSize:16,cursor:"pointer",padding:0}}>✕</button>}
+              </div>
+              {intSearch&&<div style={{fontSize:10,color:"#64748b",marginTop:4,paddingLeft:2}}>{INTERVENTIONS.filter(c=>(c.label+c.cpt+c.group).toLowerCase().includes(intSearch.toLowerCase())).length} results</div>}
+            </div>
+            {selInt.size>0&&!intSearch&&<ClearAllBar onClear={()=>setSelInt(new Set())}/>}
+            {intSearch?(()=>{
+              const q=intSearch.toLowerCase();
+              const results=INTERVENTIONS.filter(c=>(c.label+c.cpt+c.group).toLowerCase().includes(q));
+              if(!results.length) return <div style={{textAlign:"center",color:"#475569",padding:"30px 0",fontSize:13}}>No results for "{intSearch}"</div>;
+              return results.map(c=>(
+                <div key={c.id}>
+                  <div style={{fontSize:9,color:"#475569",marginBottom:2,paddingLeft:2,letterSpacing:"0.08em",textTransform:"uppercase"}}>{c.group}</div>
+                  {(()=>{const lk=isLocked(c,selInt);return <ToggleRow key={c.id} label={c.label} cpt={c.cpt} selected={selInt.has(c.id)} onToggle={()=>tog(setSelInt,c.id,INTERVENTIONS)} hasQty={c.hasQty} qty={getQ(c.id)} onQtyChange={v=>setQ(c.id,v)} maxQty={c.maxQty} locked={lk} lockMsg="Select initial code first"/>;})()}
+                </div>
+              ));
+            })()
+            :Object.entries(intGroups).map(([g,items])=>{
+              const gc=items.filter(c=>selInt.has(c.id)).length;
+              return(
+                <div key={g}>
+                  <SecHead title={g} onClear={()=>clearIntGroup(g)} count={gc}/>
+                  {items.map(c=>{const lk=isLocked(c,selInt);return <ToggleRow key={c.id} label={c.label} cpt={c.cpt} selected={selInt.has(c.id)} onToggle={()=>tog(setSelInt,c.id,INTERVENTIONS)} hasQty={c.hasQty} qty={getQ(c.id)} onQtyChange={v=>setQ(c.id,v)} maxQty={c.maxQty} locked={lk} lockMsg={c.requires?"Select initial code first":c.requiresAny?"Select any initial code first":undefined}/>;})}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ACCESS */}
+        {tab===3&&(
+          <div>
+            {selAccess.size>0&&<ClearAllBar onClear={()=>setSelAccess(new Set())}/>}
+            <SecHead title="Vascular Access" onClear={()=>setSelAccess(new Set())} count={selAccess.size}/>
+            {ACCESS_CODES.map(c=><ToggleRow key={c.id} label={c.label} cpt={c.cpt} selected={selAccess.has(c.id)} onToggle={()=>tog(setSelAccess,c.id)}/>)}
+          </div>
+        )}
+
+        {/* SUMMARY */}
+        {tab===4&&(
+          <div>
+            {summary.length===0
+              ?<div style={{textAlign:"center",color:"#475569",padding:"40px 0",fontSize:13}}>No codes selected. Go back and select procedures.</div>
+              :<>
+                <div style={{background:"rgba(15,39,68,0.8)",border:"1px solid rgba(56,189,248,0.2)",borderRadius:9,padding:"10px 14px",marginBottom:12}}>
+                  <div style={{fontSize:11,color:"#64748b"}}>Date: <span style={{color:"#e2e8f0"}}>{info.date||"—"}</span> &nbsp;|&nbsp; Provider: <span style={{color:"#e2e8f0"}}>{info.provider||"—"}</span> &nbsp;|&nbsp; Case <span style={{color:"#e2e8f0"}}>#{info.caseNum}</span></div>
+                </div>
+                {activeMods.length>0&&(
+                  <div style={{background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:8,padding:"9px 13px",marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#f59e0b",marginBottom:3}}>MODIFIERS APPLIED</div>
+                    {activeMods.map(m=><div key={m.id} style={{fontSize:12,color:"#fcd34d"}}>-{m.code} {m.label} — <span style={{color:"#92400e"}}>{m.note}</span></div>)}
+                  </div>
+                )}
+                {(()=>{
+                  const secs={};
+                  summary.forEach(l=>{if(!secs[l.sec])secs[l.sec]=[];secs[l.sec].push(l);});
+                  return Object.entries(secs).map(([s,ls])=>(
+                    <div key={s}>
+                      <SecHead title={s}/>
+                      {ls.map((l,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 11px",marginBottom:3,borderRadius:7,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)"}}>
+                          <span style={{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#38bdf8",minWidth:88}}>{l.cpt}{l.qty>1?" x"+l.qty:""}</span>
+                          <span style={{fontSize:11,color:"#94a3b8",flex:1}}>{l.desc}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ));
+                })()}
+                <div style={{marginTop:14,padding:"9px 13px",borderRadius:8,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.3)",fontSize:12,color:"#86efac",fontWeight:600}}>
+                  Total codes: {summary.length}
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:12}}>
+                  <button onClick={doCopy} style={{flex:1,padding:"13px",borderRadius:9,border:"none",background:copied?"#16a34a":"linear-gradient(135deg,#0ea5e9,#6366f1)",color:"white",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                    {copied?"✓ Copied!":"📋 Copy to Clipboard"}
+                  </button>
+                  <button onClick={doPrint} style={{flex:1,padding:"13px",borderRadius:9,border:"1px solid rgba(56,189,248,0.4)",background:"transparent",color:"#38bdf8",fontWeight:700,fontSize:13,cursor:"pointer"}}>🖨 Print / PDF</button>
+                </div>
+                <button onClick={()=>setShowReset(true)} style={{width:"100%",marginTop:8,padding:"11px",borderRadius:9,border:"1px solid rgba(239,68,68,0.35)",background:"rgba(239,68,68,0.07)",color:"#ef4444",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  🗑 New Case — Clear Everything
+                </button>
+                {showReset&&(
+                  <div style={{marginTop:8,padding:"12px",borderRadius:9,background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{flex:1,fontSize:12,color:"#fca5a5"}}>Clear all and start new case?</span>
+                    <button onClick={newCase} style={{padding:"7px 14px",borderRadius:7,border:"none",background:"#ef4444",color:"white",fontWeight:700,fontSize:12,cursor:"pointer"}}>Yes, Reset</button>
+                    <button onClick={()=>setShowReset(false)} style={{padding:"7px 14px",borderRadius:7,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontWeight:700,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                  </div>
+                )}
+              </>
+            }
+          </div>
+        )}
+      </div>
+
+        {/* wRVU TAB */}
+        {tab===5&&(
+          <div>
+            <div style={{background:"rgba(15,39,68,0.8)",border:"1px solid rgba(56,189,248,0.2)",borderRadius:9,padding:"10px 14px",marginBottom:14}}>
+              <div style={{fontSize:11,color:"#64748b"}}>2026 CMS Physician Fee Schedule — Work RVU values only (professional component)</div>
+            </div>
+            {summary.length===0
+              ?<div style={{textAlign:"center",color:"#475569",padding:"40px 0",fontSize:13}}>No codes selected. Go back and select procedures.</div>
+              :<>
+                {(()=>{
+                  const secs={};
+                  summary.forEach(l=>{if(!secs[l.sec])secs[l.sec]=[];secs[l.sec].push(l);});
+                  return Object.entries(secs).map(([s,ls])=>(
+                    <div key={s}>
+                      <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",color:"#38bdf8",padding:"14px 0 5px",borderBottom:"1px solid rgba(56,189,248,0.2)",marginBottom:7}}>{s}</div>
+                      {ls.map((l,i)=>{
+                        const rv=getWrvu(l.cpt);
+                        const total=rv*(l.qty||1);
+                        return(
+                          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",marginBottom:3,borderRadius:7,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)"}}>
+                            <span style={{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#38bdf8",minWidth:88,flexShrink:0}}>{l.cpt}{l.qty>1?" x"+l.qty:""}</span>
+                            <span style={{fontSize:11,color:"#94a3b8",flex:1}}>{l.desc.replace(/^\[.*?\] /,'')}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:rv===0?"#475569":"#a3e635",minWidth:44,textAlign:"right",flexShrink:0}}>
+                              {rv===0?"—":total.toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+                <div style={{marginTop:16,padding:"14px 16px",borderRadius:10,background:"linear-gradient(135deg,rgba(163,230,53,0.15),rgba(56,189,248,0.1))",border:"1px solid rgba(163,230,53,0.4)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:14,fontWeight:700,color:"#e2e8f0"}}>Total wRVU — Case #{info.caseNum}</span>
+                    <span style={{fontSize:24,fontWeight:800,color:"#a3e635"}}>{totalWrvu.toFixed(2)}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:4}}>Source: 2026 CMS PFS January Release — verify annually at cms.gov</div>
+                </div>
+              </>
+            }
+          </div>
+        )}
+
+      {/* FLOATING BAR */}
+      {summary.length>0&&tab!==4&&(
+        <div onClick={()=>setTab(4)} className="no-print" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:680,background:"linear-gradient(135deg,#0ea5e9,#6366f1)",padding:"13px 20px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontWeight:700,fontSize:14}}>View Summary</span>
+          <span style={{fontWeight:700,fontSize:14}}>{summary.length} codes →</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
