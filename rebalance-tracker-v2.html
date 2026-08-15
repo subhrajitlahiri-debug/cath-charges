@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rebalance Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #10141B;
+    --panel: #161B24;
+    --panel-2: #1C222D;
+    --line: #2A3140;
+    --ink: #E9EBEF;
+    --ink-dim: #8A93A3;
+    --gold: #C89B3C;
+    --gold-dim: #7A6228;
+    --teal: #4FA8A0;
+    --rust: #C1594A;
+    --fidelity: #5B8FD9;
+    --robinhood: #4FA85B;
+    --radius: 10px;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0; background: var(--bg); color: var(--ink);
+    font-family: 'Inter', sans-serif; padding: 28px 16px 60px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap{ max-width: 800px; margin: 0 auto; }
+  header{ margin-bottom: 22px; }
+  .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color: var(--gold); margin-bottom:6px; }
+  h1{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .sub{ color: var(--ink-dim); font-size:13.5px; line-height:1.5; max-width:60ch; }
+
+  .household-total{
+    display:flex; gap:18px; margin: 16px 0 22px; flex-wrap:wrap;
+  }
+  .household-total .stat{
+    background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 16px; flex:1; min-width: 140px;
+  }
+  .household-total .stat .k{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-dim); font-family:'IBM Plex Mono',monospace; margin-bottom:4px; }
+  .household-total .stat .v{ font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:600; }
+
+  .account-block{ margin-bottom: 26px; }
+  .account-head{
+    display:flex; align-items:center; gap:10px; margin-bottom:10px;
+  }
+  .dot{ width:9px; height:9px; border-radius:50%; }
+  .dot.fidelity{ background: var(--fidelity); }
+  .dot.robinhood{ background: var(--robinhood); }
+  .account-head h2{
+    font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700; margin:0;
+  }
+  .account-head .acc-total{ margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink-dim); }
+
+  .panel{
+    background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+    padding: 16px 16px 18px; margin-bottom: 12px;
+  }
+  .panel h3{
+    font-family:'Space Grotesk',sans-serif; font-size:12.5px; font-weight:600; margin:0 0 4px;
+    text-transform:uppercase; letter-spacing:.04em; color: var(--ink-dim);
+  }
+
+  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; }
+  @media (max-width:560px){ .grid{ grid-template-columns: 1fr; } }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:11px; color: var(--ink-dim); display:flex; justify-content:space-between; }
+  .field label .tgt{ font-family:'IBM Plex Mono',monospace; color:#5B6472; }
+  .field .inputrow{
+    display:flex; align-items:center; background: var(--panel-2);
+    border:1px solid var(--line); border-radius:7px; padding:0 10px;
+  }
+  .field .inputrow:focus-within{ border-color: var(--gold-dim); }
+  .field .inputrow span{ color: var(--ink-dim); font-family:'IBM Plex Mono',monospace; font-size:13px; }
+  .field input{
+    background:transparent; border:none; outline:none; color: var(--ink);
+    font-family:'IBM Plex Mono',monospace; font-size:13.5px; padding:8px 6px 8px 4px; width:100%;
+  }
+
+  .contribution-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .contribution-row .field{ flex:1; min-width:150px; }
+
+  .bars{ margin-top:2px; }
+  .bar-row{ margin-bottom:10px; }
+  .bar-row:last-child{ margin-bottom:0; }
+  .bar-label{ display:flex; justify-content:space-between; align-items:baseline; font-size:11.5px; margin-bottom:4px; }
+  .bar-label .name{ color: var(--ink); font-weight:500; }
+  .bar-label .pct{ font-family:'IBM Plex Mono',monospace; color: var(--ink-dim); }
+  .bar-track{ position:relative; height:7px; background: var(--panel-2); border-radius:4px; overflow:hidden; }
+  .bar-fill{ position:absolute; left:0; top:0; bottom:0; background: var(--teal); border-radius:4px; transition:width .3s ease; }
+  .bar-fill.over{ background: var(--rust); }
+  .bar-target{ position:absolute; top:-3px; bottom:-3px; width:2px; background: var(--gold); }
+
+  table.buy{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:4px; }
+  table.buy th{
+    text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.06em;
+    text-transform:uppercase; color: var(--ink-dim); font-weight:500; padding:0 8px 7px 0; border-bottom:1px solid var(--line);
+  }
+  table.buy td{ padding:8px 8px 8px 0; border-bottom:1px solid var(--line); font-family:'IBM Plex Mono',monospace; color: var(--ink); }
+  table.buy td.ticker{ font-family:'Space Grotesk',sans-serif; font-weight:600; color: var(--gold); }
+  table.buy td.bucket{ font-family:'Inter',sans-serif; color: var(--ink-dim); font-size:11.5px; }
+  table.buy tr:last-child td{ border-bottom:none; }
+  table.buy tfoot td{ font-weight:600; color: var(--ink); border-top:1px solid var(--line); border-bottom:none; padding-top:11px; }
+
+  .hint{ color: var(--ink-dim); font-size:12px; margin:0 0 10px; }
+  .empty-note{ color: var(--ink-dim); font-size:12.5px; padding:4px 2px; }
+
+  .price-panel .price-inputs{ display:flex; flex-wrap:wrap; gap:8px 16px; }
+  .price-panel .pf{ display:flex; align-items:center; gap:6px; }
+  .price-panel .pf label{ font-size:11.5px; color:var(--ink-dim); font-family:'IBM Plex Mono',monospace; }
+  .price-panel .pf input{
+    width:66px; background: var(--panel-2); border:1px solid var(--line); border-radius:5px;
+    color: var(--ink); font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:5px 6px;
+  }
+
+  .cadence-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .cadence-row .field{ min-width:150px; flex:1; }
+  select#dummy{ display:none; }
+  .field select{
+    background: var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    color: var(--ink); font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:9px 8px;
+    appearance:none; -webkit-appearance:none;
+  }
+  .field input[type="date"]{
+    background: var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    color: var(--ink); font-family:'IBM Plex Mono',monospace; font-size:12.5px; padding:8px;
+  }
+  .next-due{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; padding:8px 10px;
+    background: var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    display:flex; justify-content:space-between; align-items:center; margin-top:8px;
+  }
+  .next-due .lbl{ color: var(--ink-dim); }
+  .next-due .date{ color: var(--gold); font-weight:600; }
+  .next-due.due .date{ color: var(--rust); }
+
+  .actions{ display:flex; gap:10px; align-items:center; margin: 4px 0 22px; flex-wrap:wrap; }
+  button.calc{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px;
+    background: var(--gold); color:#1A1406; border:none; border-radius:7px; padding:11px 18px; cursor:pointer;
+  }
+  button.calc:hover{ background:#D8AD52; }
+  button.secondary{
+    background:transparent; border:1px solid var(--line); color: var(--ink-dim);
+    font-family:'Inter',sans-serif; font-size:12.5px; border-radius:7px; padding:9px 14px; cursor:pointer;
+  }
+  button.secondary:hover{ border-color:#454F60; color: var(--ink); }
+  .status{ font-size:11.5px; color: var(--ink-dim); font-family:'IBM Plex Mono',monospace; }
+  .status.saved{ color: var(--teal); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Household · Two accounts, one target</div>
+    <h1>Rebalance Tracker</h1>
+    <div class="sub">Fidelity and Robinhood are tracked and funded separately — each account gets its own buy list, self-funded from its own contribution, because money can't move between brokerages same-day. Both aim at the same target weights, so together they keep the household balanced.</div>
+  </header>
+
+  <div class="household-total" id="householdTotals"></div>
+
+  <div class="actions">
+    <button class="calc" onclick="calculate()">Calculate</button>
+    <button class="secondary" onclick="saveState()">Save balances</button>
+    <span class="status" id="saveStatus"></span>
+  </div>
+
+  <div id="accountsWrap"></div>
+
+  <div class="panel price-panel">
+    <h3>Fund prices <span style="font-weight:400;text-transform:none;letter-spacing:0">(shared — same market price at either broker)</span></h3>
+    <div class="price-inputs" id="priceInputs"></div>
+  </div>
+
+</div>
+
+<script>
+const BUCKETS = [
+  { key:'cash',    label:'Cash',            pct:0.10, ticker:'SPAXX', price:1.00 },
+  { key:'gold',    label:'Gold',            pct:0.12, ticker:'GLDM',  price:86.58 },
+  { key:'tips',    label:'TIPS / Munis',    pct:0.15, ticker:['MUB','SCHP'], price:[105.86,25.97] },
+  { key:'core',    label:'Core US index',   pct:0.28, ticker:'VOO',   price:713.61 },
+  { key:'divval',  label:'Dividend / Value',pct:0.15, ticker:'SCHD',  price:34.53 },
+  { key:'intl',    label:'International',   pct:0.10, ticker:'VXUS',  price:87.58 },
+  { key:'hibeta',  label:'High-beta growth',pct:0.10, ticker:null,    price:null },
+];
+
+// per-account ticker overrides — e.g. Robinhood holds IAUM instead of GLDM for gold
+const ACCOUNT_TICKER_OVERRIDES = {
+  robinhood: { gold: 'IAUM' }
+};
+
+const FREQ_MONTHS = { monthly:1, bimonthly:2, quarterly:3, semiannual:6, oneoff:null };
+const FREQ_LABELS = { monthly:'Monthly', bimonthly:'Every 2 months', quarterly:'Quarterly', semiannual:'Every 6 months', oneoff:'One-off' };
+
+const ACCOUNTS_DEFAULT = [
+  {
+    id:'fidelity', label:'Fidelity', color:'fidelity', monthly:1500,
+    frequency:'monthly', lastInvested:'',
+    balances:{ cash:7871.01, gold:9652.06, tips:11919.76, core:23603.98, divval:11930.13, intl:8021.71, hibeta:11302.12 }
+  },
+  {
+    id:'robinhood', label:'Robinhood', color:'robinhood', monthly:1500,
+    frequency:'monthly', lastInvested:'',
+    balances:{ cash:8547.33, gold:0, tips:12820.99, core:23932.51, divval:12820.99, intl:8547.33, hibeta:8547.32 }
+  }
+];
+
+let state = { accounts: JSON.parse(JSON.stringify(ACCOUNTS_DEFAULT)), prices: {} };
+BUCKETS.forEach(b=>{
+  if(Array.isArray(b.ticker)){ b.ticker.forEach((t,i)=> state.prices[t]=b.price[i]); }
+  else if(b.ticker){ state.prices[b.ticker]=b.price; }
+});
+state.prices['IAUM'] = 43.57;
+
+function tickerFor(accId, bucket){
+  const override = ACCOUNT_TICKER_OVERRIDES[accId] && ACCOUNT_TICKER_OVERRIDES[accId][bucket.key];
+  return override || bucket.ticker;
+}
+
+function fmt(n){ return '$' + n.toLocaleString('en-US',{maximumFractionDigits:0}); }
+function fmt2(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function renderShell(){
+  const wrap = document.getElementById('accountsWrap');
+  wrap.innerHTML = '';
+  state.accounts.forEach(acc=>{
+    const block = document.createElement('div');
+    block.className = 'account-block';
+    block.innerHTML = `
+      <div class="account-head">
+        <span class="dot ${acc.color}"></span>
+        <h2>${acc.label}</h2>
+        <span class="acc-total" id="total_${acc.id}">$0</span>
+      </div>
+      <div class="panel">
+        <h3>Current balances</h3>
+        <div class="grid" id="grid_${acc.id}"></div>
+      </div>
+      <div class="panel">
+        <h3>Investment — ${acc.label}</h3>
+        <div class="cadence-row">
+          <div class="field">
+            <label>Amount this time</label>
+            <div class="inputrow"><span>$</span><input type="number" id="monthly_${acc.id}" value="${acc.monthly}" step="50"></div>
+          </div>
+          <div class="field">
+            <label>How often</label>
+            <select id="freq_${acc.id}">
+              ${Object.keys(FREQ_LABELS).map(f=>`<option value="${f}" ${acc.frequency===f?'selected':''}>${FREQ_LABELS[f]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Last invested</label>
+            <input type="date" id="last_${acc.id}" value="${acc.lastInvested||''}">
+          </div>
+        </div>
+        <div class="next-due" id="due_${acc.id}"></div>
+      </div>
+      <div class="panel">
+        <h3>Allocation vs. target</h3>
+        <div class="bars" id="bars_${acc.id}"></div>
+      </div>
+      <div class="panel">
+        <h3>What to buy in ${acc.label} this month</h3>
+        <p class="hint" id="hint_${acc.id}"></p>
+        <div id="buy_${acc.id}"></div>
+      </div>
+    `;
+    wrap.appendChild(block);
+
+    const grid = document.getElementById('grid_'+acc.id);
+    BUCKETS.forEach(b=>{
+      const div = document.createElement('div');
+      div.className='field';
+      div.innerHTML = `
+        <label>${b.label} <span class="tgt">target ${(b.pct*100).toFixed(0)}%</span></label>
+        <div class="inputrow"><span>$</span><input type="number" id="bal_${acc.id}_${b.key}" value="${acc.balances[b.key]}" step="10"></div>
+      `;
+      grid.appendChild(div);
+    });
+  });
+
+  const pricesWrap = document.getElementById('priceInputs');
+  pricesWrap.innerHTML = '';
+  const allTickers = new Set();
+  BUCKETS.forEach(b=>{
+    if(!b.ticker) return;
+    const tickers = Array.isArray(b.ticker) ? b.ticker : [b.ticker];
+    tickers.forEach(t=> allTickers.add(t));
+  });
+  Object.values(ACCOUNT_TICKER_OVERRIDES).forEach(overrides=>{
+    Object.values(overrides).forEach(t=> allTickers.add(t));
+  });
+  allTickers.forEach(t=>{
+    if(t==='SPAXX') return;
+    const pf = document.createElement('div');
+    pf.className='pf';
+    pf.innerHTML = `<label>${t} $</label><input type="number" id="price_${t}" value="${state.prices[t]!==undefined?state.prices[t]:''}" step="0.01">`;
+    pricesWrap.appendChild(pf);
+  });
+}
+
+function readInputs(){
+  state.accounts.forEach(acc=>{
+    BUCKETS.forEach(b=>{
+      const el = document.getElementById(`bal_${acc.id}_${b.key}`);
+      acc.balances[b.key] = parseFloat(el.value)||0;
+    });
+    acc.monthly = parseFloat(document.getElementById('monthly_'+acc.id).value)||0;
+    const freqEl = document.getElementById('freq_'+acc.id);
+    if(freqEl) acc.frequency = freqEl.value;
+    const lastEl = document.getElementById('last_'+acc.id);
+    if(lastEl) acc.lastInvested = lastEl.value;
+  });
+  const allTickers = new Set();
+  BUCKETS.forEach(b=>{
+    if(!b.ticker) return;
+    (Array.isArray(b.ticker) ? b.ticker : [b.ticker]).forEach(t=> allTickers.add(t));
+  });
+  Object.values(ACCOUNT_TICKER_OVERRIDES).forEach(overrides=>{
+    Object.values(overrides).forEach(t=> allTickers.add(t));
+  });
+  allTickers.forEach(t=>{
+    if(t==='SPAXX') return;
+    const el = document.getElementById('price_'+t);
+    if(el) state.prices[t] = parseFloat(el.value)||0;
+  });
+}
+
+function nextDueLabel(acc){
+  const dueEl = document.getElementById('due_'+acc.id);
+  if(!dueEl) return;
+  const months = FREQ_MONTHS[acc.frequency];
+  if(!acc.lastInvested || months===null || months===undefined){
+    dueEl.innerHTML = `<span class="lbl">Next due</span><span class="date">set last-invested date to track</span>`;
+    dueEl.classList.remove('due');
+    return;
+  }
+  const last = new Date(acc.lastInvested + 'T00:00:00');
+  const next = new Date(last);
+  next.setMonth(next.getMonth() + months);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isDue = next <= today;
+  dueEl.innerHTML = `<span class="lbl">Next due (${FREQ_LABELS[acc.frequency]})</span><span class="date">${next.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}${isDue?' — due now':''}</span>`;
+  dueEl.classList.toggle('due', isDue);
+}
+
+function calcAccount(acc){
+  const total = Object.values(acc.balances).reduce((a,b)=>a+b,0);
+  document.getElementById('total_'+acc.id).textContent = fmt(total);
+  nextDueLabel(acc);
+
+  const rows = BUCKETS.map(b=>{
+    const current = acc.balances[b.key];
+    const target = total * b.pct;
+    return {...b, ticker: tickerFor(acc.id, b), current, target, gap: target-current};
+  });
+
+  const barsWrap = document.getElementById('bars_'+acc.id);
+  barsWrap.innerHTML = '';
+  rows.forEach(r=>{
+    const curPct = total>0 ? (r.current/total*100) : 0;
+    const tgtPct = r.pct*100;
+    const over = curPct > tgtPct + 0.3;
+    const row = document.createElement('div');
+    row.className='bar-row';
+    row.innerHTML = `
+      <div class="bar-label">
+        <span class="name">${r.label}</span>
+        <span class="pct">${curPct.toFixed(1)}% <span style="color:#5B6472">/ ${tgtPct.toFixed(0)}%</span></span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill ${over?'over':''}" style="width:${Math.min(curPct,100)}%"></div>
+        <div class="bar-target" style="left:${Math.min(tgtPct,100)}%"></div>
+      </div>
+    `;
+    barsWrap.appendChild(row);
+  });
+
+  const eligible = rows.filter(r=> r.gap > 0 && r.ticker);
+  const sumGap = eligible.reduce((a,r)=>a+r.gap,0);
+  const monthly = acc.monthly;
+  const hintEl = document.getElementById('hint_'+acc.id);
+  const buyWrap = document.getElementById('buy_'+acc.id);
+
+  if(eligible.length===0){
+    buyWrap.innerHTML = '<div class="empty-note">Every bucket in this account is at or above target — hold this contribution in cash, or re-check balances.</div>';
+    hintEl.textContent = '';
+    return total;
+  }
+
+  let buyAmounts = {};
+  if(monthly <= sumGap){
+    hintEl.textContent = `Gap-closing — contribution is smaller than the ${fmt(sumGap)} underweight, split proportional to how far behind each bucket is.`;
+    eligible.forEach(r=>{ buyAmounts[r.key] = monthly * (r.gap/sumGap); });
+  } else {
+    hintEl.textContent = `Steady-state — this covers the full ${fmt(sumGap)} gap, so the rest maintains target weights going forward.`;
+    let leftover = monthly - sumGap;
+    const weightSum = eligible.reduce((a,r)=>a+r.pct,0);
+    eligible.forEach(r=>{ buyAmounts[r.key] = r.gap + leftover*(r.pct/weightSum); });
+  }
+
+  let tickerRows = [];
+  let totalBuy = 0;
+  eligible.forEach(r=>{
+    const amt = buyAmounts[r.key];
+    totalBuy += amt;
+    if(Array.isArray(r.ticker)){
+      const half = amt/2;
+      r.ticker.forEach(t=>{
+        const price = state.prices[t];
+        tickerRows.push({ ticker:t, bucket:r.label, amount:half, shares: price>0 ? half/price : 0 });
+      });
+    } else {
+      const price = state.prices[r.ticker];
+      tickerRows.push({ ticker:r.ticker, bucket:r.label, amount:amt, shares: r.ticker==='SPAXX' ? amt : (price>0 ? amt/price : 0) });
+    }
+  });
+
+  let html = '<table class="buy"><thead><tr><th>Buy</th><th>Bucket</th><th>Amount</th><th>Shares</th></tr></thead><tbody>';
+  tickerRows.forEach(t=>{
+    html += `<tr>
+      <td class="ticker">${t.ticker}</td>
+      <td class="bucket">${t.bucket}</td>
+      <td>$${fmt2(t.amount)}</td>
+      <td>${t.ticker==='SPAXX' ? '—' : t.shares.toFixed(3)}</td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr><td colspan="2">Total</td><td>$${fmt2(totalBuy)}</td><td></td></tr></tfoot></table>`;
+  buyWrap.innerHTML = html;
+  return total;
+}
+
+function calculate(){
+  readInputs();
+  let householdTotal = 0;
+  let householdMonthly = 0;
+  state.accounts.forEach(acc=>{
+    householdTotal += calcAccount(acc);
+    householdMonthly += acc.monthly;
+  });
+
+  const htWrap = document.getElementById('householdTotals');
+  htWrap.innerHTML = `
+    <div class="stat"><div class="k">Household total</div><div class="v">${fmt(householdTotal)}</div></div>
+    <div class="stat"><div class="k">This month's contribution</div><div class="v">${fmt(householdMonthly)}</div></div>
+  `;
+}
+
+async function saveState(){
+  readInputs();
+  const statusEl = document.getElementById('saveStatus');
+  try{
+    await window.storage.set('rebalance-tracker-state-v3', JSON.stringify(state), false);
+    statusEl.textContent = 'Saved ' + new Date().toLocaleString();
+    statusEl.classList.add('saved');
+  }catch(e){
+    statusEl.textContent = 'Could not save — try again';
+    statusEl.classList.remove('saved');
+  }
+}
+
+async function loadState(){
+  try{
+    const res = await window.storage.get('rebalance-tracker-state-v3', false);
+    if(res && res.value){
+      const saved = JSON.parse(res.value);
+      if(saved.accounts) state.accounts = saved.accounts;
+      if(saved.prices) state.prices = {...state.prices, ...saved.prices};
+    }
+  }catch(e){
+    // no saved state yet — defaults stand
+  }
+  renderShell();
+  calculate();
+}
+
+loadState();
+</script>
+</body>
+</html>
